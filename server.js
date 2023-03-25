@@ -1,16 +1,17 @@
 /*********************************************************************************
-*  WEB322 – Assignment 04
+*  WEB322 – Assignment 05
 *  I declare that this assignment is my own work in accordance with Seneca  Academic Policy.  No part * 
 *  of this assignment has been copied manually or electronically from any other source 
 *  (including 3rd party web sites) or distributed to other students.
 * 
 *  Name: Kalki Tageja 
 *  Student ID: 163983216
-*  Date: 2023-03-10
+*  Date: 2023-03-24
 *
 *  Online (Cyclic) Link: https://funny-boa-shrug.cyclic.app/
 *
 ********************************************************************************/ 
+
 
 
 
@@ -25,6 +26,7 @@ const stripJs = require('strip-js');
 
 var app = express();
 app.use(express.static("public"));
+app.use(express.urlencoded({extended: true}));
 app.engine(
   "hbs",
   exphbs.engine({
@@ -52,6 +54,12 @@ app.engine(
       },
       safeHTML: function(context){
         return stripJs(context);
+      },
+      formatDate: function(dateObj){
+        let year = dateObj.getFullYear();
+        let month = (dateObj.getMonth() + 1).toString();
+        let day = dateObj.getDate().toString();
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2,'0')}`;
       }
     
     },
@@ -59,11 +67,13 @@ app.engine(
 );
 app.set('view engine', 'hbs');
 
+
+
 cloudinary.config({
-    cloud_name: 'dof5wvptk',
-    api_key: '669218948891845',
-    api_secret: 'unsaXGzxe6meJUjQFEaFLl-B4lY',
-    secure: true
+  cloud_name: 'dof5wvptk',
+  api_key: '669218948891845',
+  api_secret: 'unsaXGzxe6meJUjQFEaFLl-B4lY',
+  secure: true
 });
 
 const fileUpload = multer();
@@ -84,7 +94,14 @@ app.get("/about", (req, res) => {
 });
 
 app.get("/posts/add", (req, res) => {
-  res.render("addPost");
+  blogService
+    .getCategories()
+    .then((data) => {
+      res.render("addPost", { categories: data });
+    })
+    .catch((err) => {
+      res.render("addPost", { categories: [], message: "no results" });
+    });
 });
 
 app.post("/posts/add", fileUpload.single("featureImage"), (req, res) => {
@@ -130,16 +147,24 @@ app.get("/posts", (req, res) => {
     blogService
       .getPostsByCategory(category)
       .then((data) => {
-        res.render("posts", {posts: data})
+        if (data.length > 0) {
+          res.render("posts", { posts: data });
+        } else {
+          res.render("posts", { message: "no results" });
+        }
       })
       .catch((err) => {
-        res.render("posts", {message: "no results"});
+        res.render("posts", { message: "no results" });
       });
   } else if (minDate) {
     blogService
       .getPostsByMinDate(minDate)
       .then((data) => {
-        res.render("posts", {posts: data})
+        if (data.length > 0) {
+          res.render("posts", { posts: data });
+        } else {
+          res.render("posts", { message: "no results" });
+        }
       })
       .catch((err) => {
         res.render("posts", {message: "no results"});
@@ -148,7 +173,11 @@ app.get("/posts", (req, res) => {
     blogService
       .getAllPosts()
       .then((data) => {
-        res.render("posts", {posts: data})
+        if (data.length > 0) {
+          res.render("posts", { posts: data });
+        } else {
+          res.render("posts", { message: "no results" });
+        }
       })
       .catch((err) => {
         res.render("posts", {message: "no results"});
@@ -172,20 +201,63 @@ app.get("/categories", (req, res) => {
   blogService
     .getCategories()
     .then((categories) => {
-      res.render("categories", { categories: categories });
+      if (categories.length > 0) {
+        res.render("categories", { categories: categories });
+      } else {
+        res.render("categories", { message: "no results" });
+      }
     })
     .catch((err) => {
       res.render("categories", { message: "no results" });
     });
 });
 
+
+app.get('/categories/add', (req, res) => {
+  res.render('addCategory');
+});
+
+app.post('/categories/add', (req, res) => {
+  const categoryData = { category: req.body.category };
+  blogService
+    .addCategory(categoryData)
+    .then(() => {
+      res.redirect("/categories");
+    })
+    .catch(() => {
+      res.status(500).send("Unable to create category");
+    });
+});
+
+app.get('/categories/delete/:id', (req, res) => {
+  blogService
+    .deleteCategoryById(req.params.id)
+    .then(() => {
+      res.redirect("/categories");
+    })
+    .catch(() => {
+      res.status(500).send("Unable to Remove Category / Category not found");
+    });
+});
+
+app.get('/posts/delete/:id', (req, res) => {
+  blogService
+    .deletePostById(req.params.id)
+    .then(() => {
+      res.redirect("/posts");
+    })
+    .catch(() => {
+      res.status(500).send("Unable to Remove Post / Post not found");
+    });
+});
+
+
 app.get('/blog', async (req, res) => {
 
   let viewData = {};
+
   try{
       let posts = [];
-
-
       if(req.query.category){
           posts = await blogService.getPublishedPostsByCategory(req.query.category);
       }else{
@@ -220,7 +292,6 @@ app.get('/blog/:id', async (req, res) => {
       }else{
           posts = await blogService.getPublishedPosts();
       }
-
       posts.sort((a,b) => new Date(b.postDate) - new Date(a.postDate));
       viewData.posts = posts;
 
@@ -235,17 +306,16 @@ app.get('/blog/:id', async (req, res) => {
   }
 
   try{
-     let categories = await blogService.getCategories();
+      let categories = await blogService.getCategories();
       viewData.categories = categories;
   }catch(err){
       viewData.categoriesMessage = "no results"
   }
-
   res.render("blog", {data: viewData})
 });
 
 app.use((req, res) => {
-    res.status(404).end('404 PAGE NOT FOUND');
+  res.status(404).render("404");
 });
 
 blogService

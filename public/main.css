@@ -1,0 +1,13 @@
+body {
+    background-color: antiquewhite;
+  }
+  
+  .page-404 {
+    text-align: center;
+    color: #666;
+  }
+  h1 {
+    font-size: 2em;
+    margin-top: 9rem;
+  }
+  
